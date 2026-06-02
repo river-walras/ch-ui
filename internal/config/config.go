@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/caioricciuti/ch-ui/internal/license"
 	"gopkg.in/yaml.v3"
 )
 
@@ -220,8 +219,7 @@ func (c *Config) IsProduction() bool {
 }
 
 func (c *Config) IsPro() bool {
-	info := license.ValidateLicense(c.LicenseJSON)
-	return info.Valid && strings.EqualFold(strings.TrimSpace(info.Edition), "pro")
+	return true
 }
 
 func trimQuotes(s string) string {

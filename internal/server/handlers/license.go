@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/caioricciuti/ch-ui/internal/config"
 	"github.com/caioricciuti/ch-ui/internal/database"
@@ -16,14 +17,23 @@ type LicenseHandler struct {
 	Config *config.Config
 }
 
-// GetLicense returns the current license status.
-// GET /api/license
-func (h *LicenseHandler) GetLicense(w http.ResponseWriter, r *http.Request) {
-	info := license.ValidateLicense(h.Config.LicenseJSON)
-	writeJSON(w, http.StatusOK, info)
+func openLicenseInfo() *license.LicenseInfo {
+	return &license.LicenseInfo{
+		Edition:   "pro",
+		Valid:     true,
+		Customer:  "Open Deployment",
+		ExpiresAt: time.Now().AddDate(100, 0, 0).UTC().Format(time.RFC3339),
+		LicenseID: "open",
+	}
 }
 
-// ActivateLicense activates a new license by validating and storing the signed JSON.
+// GetLicense returns the built-in open feature status.
+// GET /api/license
+func (h *LicenseHandler) GetLicense(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, openLicenseInfo())
+}
+
+// ActivateLicense stores optional license JSON while keeping features open.
 // POST /api/license/activate
 func (h *LicenseHandler) ActivateLicense(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -40,12 +50,6 @@ func (h *LicenseHandler) ActivateLicense(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	info := license.ValidateLicense(licenseJSON)
-	if !info.Valid {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid or expired license"})
-		return
-	}
-
 	// Store in settings
 	if err := h.DB.SetSetting("license_json", licenseJSON); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to save license"})
@@ -55,10 +59,10 @@ func (h *LicenseHandler) ActivateLicense(w http.ResponseWriter, r *http.Request)
 	// Update runtime config
 	h.Config.LicenseJSON = licenseJSON
 
-	writeJSON(w, http.StatusOK, info)
+	writeJSON(w, http.StatusOK, openLicenseInfo())
 }
 
-// DeactivateLicense removes the current license (downgrade to community).
+// DeactivateLicense removes stored license JSON while keeping features open.
 // POST /api/license/deactivate
 func (h *LicenseHandler) DeactivateLicense(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.DeleteSetting("license_json"); err != nil {
@@ -68,5 +72,5 @@ func (h *LicenseHandler) DeactivateLicense(w http.ResponseWriter, r *http.Reques
 
 	h.Config.LicenseJSON = ""
 
-	writeJSON(w, http.StatusOK, license.CommunityLicense())
+	writeJSON(w, http.StatusOK, openLicenseInfo())
 }
