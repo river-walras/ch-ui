@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { listConnections } from "../lib/api/auth";
+  import { listConnections, getAuthConfig } from "../lib/api/auth";
   import { login, getError } from "../lib/stores/session.svelte";
   import type { Connection } from "../lib/types/api";
   import Button from "../lib/components/common/Button.svelte";
@@ -32,6 +32,10 @@
   let showSetupSheet = $state(false);
   let setupClickHouseURL = $state("http://localhost:8123");
   let setupConnectionName = $state("Local ClickHouse");
+
+  let ssoEnabled = $state(false);
+  let ssoLoginUrl = $state("/api/auth/oidc/login");
+  let ssoError = $state<string | null>(null);
 
   type LoginErrorKind = "auth" | "connection" | "rateLimit" | "generic";
 
@@ -79,6 +83,17 @@
   }
 
   onMount(async () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get("sso_error");
+      if (err) ssoError = err;
+    } catch {}
+
+    getAuthConfig().then((cfg) => {
+      ssoEnabled = cfg.oidc_enabled;
+      if (cfg.oidc_login_url) ssoLoginUrl = cfg.oidc_login_url;
+    });
+
     try {
       connections = await listConnections();
       if (connections.length === 1) {
@@ -356,6 +371,29 @@
               <ArrowRight size={14} />
             </span>
           </Button>
+
+          {#if ssoEnabled}
+            <div class="my-3 flex items-center gap-3 text-xs text-gray-400">
+              <span class="h-px flex-1 bg-gray-300 dark:bg-gray-700"></span>
+              or
+              <span class="h-px flex-1 bg-gray-300 dark:bg-gray-700"></span>
+            </div>
+            {#if ssoError}
+              <div class="mb-2 rounded-md bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+                {ssoError}
+              </div>
+            {/if}
+            <Button
+              type="button"
+              variant="secondary"
+              onclick={() => (window.location.href = ssoLoginUrl)}
+            >
+              <span class="btn-inner">
+                <ShieldCheck size={14} />
+                Sign in with SSO
+              </span>
+            </Button>
+          {/if}
         </form>
       {/if}
 

@@ -15,6 +15,7 @@
         "@codemirror/view": "^6.42.1",
         "@tailwindcss/vite": "^4.3.0",
         "@xyflow/svelte": "^1.5.2",
+        "dompurify": "^3.4.9",
         "lucide-svelte": "^1.0.1",
         "marked": "^18.0.3",
         "svelte-sonner": "^1.1.1",
@@ -244,6 +245,8 @@
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
     "devalue": ["devalue@5.8.0", "", {}, "sha512-2zA9pFEsnp7vWBZbXF5JAgAq0fsUIt/1XPbRiAmRV3lp/2C3upzH+sADiyy66aFCihoLEsrQHxNM5w1gIDfsBg=="],
+
+    "dompurify": ["dompurify@3.4.9", "", { "optionalDependencies": { "@types/trusted-types": "^2.0.7" } }, "sha512-4dPSRMRDqHvs0V4YDFCsaIZo4if5u0xM+llyxiM2fwuZFdKArUBAF3VtI2+n8NKg9P870WMdYk0UhqQNoWXbfQ=="],
 
     "enhanced-resolve": ["enhanced-resolve@5.21.2", "", { "dependencies": { "graceful-fs": "^4.2.4", "tapable": "^2.3.3" } }, "sha512-xe9vQb5kReirPUxgQrXA3ihgbCqssmTiM7cOZ+Gzu+VeGWgpV98lLZvp0dl4yriyAePcewxGUs9UpKD8PET9KQ=="],
 

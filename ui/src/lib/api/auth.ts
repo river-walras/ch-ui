@@ -22,6 +22,21 @@ interface SessionResponse {
   session: Session
 }
 
+export interface AuthConfig {
+  password_login: boolean
+  oidc_enabled: boolean
+  oidc_login_url?: string
+}
+
+/** Report which login methods the server offers (password, SSO). */
+export async function getAuthConfig(): Promise<AuthConfig> {
+  try {
+    return await apiGet<AuthConfig>('/api/auth/config')
+  } catch {
+    return { password_login: true, oidc_enabled: false }
+  }
+}
+
 /** Log in to a ClickHouse connection */
 export function login(params: LoginParams): Promise<LoginResponse> {
   return apiPost<LoginResponse>('/api/auth/login', params)

@@ -11,12 +11,6 @@
   let expanded = $state(false)
   let deciding = $state(false)
   let localDecision = $state<'approved' | 'declined' | null>(null)
-  const compact = $derived(
-    !expanded &&
-    effectiveStatus !== 'pending' &&
-    effectiveStatus !== 'pending_approval' &&
-    effectiveStatus !== 'running'
-  )
 
   const summary = $derived(formatArgs(toolCall.args))
   const resultPreview = $derived(formatResult(toolCall.result))
@@ -147,6 +141,12 @@
   }
 
   const effectiveStatus = $derived(localDecision === 'approved' ? 'pending' : localDecision === 'declined' ? 'declined' : toolCall.status)
+  const compact = $derived(
+    !expanded &&
+    effectiveStatus !== 'pending' &&
+    effectiveStatus !== 'pending_approval' &&
+    effectiveStatus !== 'running'
+  )
 
   function statusIcon(s?: string): string {
     switch (s) {
