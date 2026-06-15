@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2024-2026 Caio Ricciuti.
+// Part of CH-UI Pro. Licensed under the Business Source License 1.1 (see
+// LICENSE.BSL), NOT the Apache-2.0 LICENSE that governs the rest of the repo.
+
 package handlers
 
 import (
@@ -100,8 +105,10 @@ func (h *GovernanceHandler) Routes() chi.Router {
 	r.Get("/incidents/{id}/comments", h.ListIncidentComments)
 	r.With(middleware.RequireAdmin(h.DB)).Post("/incidents/{id}/comments", h.CreateIncidentComment)
 
-	// Audit logs
-	r.Get("/audit-logs", h.GetAuditLogs)
+	// Audit logs (admin-only — the trail contains other users' usernames, IPs,
+	// and query text)
+	r.With(middleware.RequireAdmin(h.DB)).Get("/audit-logs", h.GetAuditLogs)
+	r.With(middleware.RequireAdmin(h.DB)).Get("/audit-logs/export", h.GetAuditLogsExport)
 
 	// ClickHouse query log
 	r.Get("/clickhouse-query-log", h.GetClickHouseQueryLog)

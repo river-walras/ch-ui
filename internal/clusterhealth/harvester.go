@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2024-2026 Caio Ricciuti.
+// Part of CH-UI Pro. Licensed under the Business Source License 1.1 (see
+// LICENSE.BSL), NOT the Apache-2.0 LICENSE that governs the rest of the repo.
+
 package clusterhealth
 
 import (
@@ -9,6 +14,7 @@ import (
 
 	"github.com/caioricciuti/ch-ui/internal/crypto"
 	"github.com/caioricciuti/ch-ui/internal/database"
+	"github.com/caioricciuti/ch-ui/internal/safe"
 	"github.com/caioricciuti/ch-ui/internal/tunnel"
 )
 
@@ -67,6 +73,7 @@ func (h *Harvester) StartBackground() {
 	h.mu.Unlock()
 
 	go func() {
+		defer safe.Recover("clusterhealth-harvester")
 		slog.Info("Cluster health harvester started", "tick", tickInterval)
 		ticker := time.NewTicker(tickInterval)
 		defer ticker.Stop()

@@ -273,8 +273,8 @@ func (c *CHClient) ExecuteRaw(ctx context.Context, query, user, password, format
 
 // StreamChunk holds a batch of rows for streaming execution.
 type StreamChunk struct {
-	Seq  int               `json:"seq"`
-	Data json.RawMessage   `json:"data"` // JSON array of arrays: [[v1,v2],[v3,v4],...]
+	Seq  int             `json:"seq"`
+	Data json.RawMessage `json:"data"` // JSON array of arrays: [[v1,v2],[v3,v4],...]
 }
 
 // ExecuteStreaming runs a query using JSONCompactEachRow format, reading the response

@@ -107,6 +107,7 @@ func (h *kafkaGroupHandler) Cleanup(_ sarama.ConsumerGroupSession) error { retur
 
 func (h *kafkaGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	var buf []Record
+	var msgs []*sarama.ConsumerMessage
 	ticker := time.NewTicker(time.Duration(h.batchTimeoutMs) * time.Millisecond)
 	defer ticker.Stop()
 
@@ -114,9 +115,18 @@ func (h *kafkaGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, cl
 		if len(buf) == 0 {
 			return
 		}
+		// Capture the messages this batch is responsible for. Offsets are only
+		// marked (and later auto-committed) once the runner acks a durable write,
+		// so a crash before the sink write re-delivers these messages.
+		marked := msgs
 		batch := Batch{
 			Records:  buf,
 			SourceTS: time.Now(),
+			Ack: func() {
+				for _, m := range marked {
+					session.MarkMessage(m, "")
+				}
+			},
 		}
 		select {
 		case h.out <- batch:
@@ -124,6 +134,7 @@ func (h *kafkaGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, cl
 			return
 		}
 		buf = nil
+		msgs = nil
 	}
 
 	for {
@@ -151,7 +162,7 @@ func (h *kafkaGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, cl
 				Data:    data,
 				RawJSON: msg.Value,
 			})
-			session.MarkMessage(msg, "")
+			msgs = append(msgs, msg)
 			if len(buf) >= h.batchSize {
 				flush()
 			}

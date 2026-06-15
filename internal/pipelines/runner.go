@@ -275,7 +275,14 @@ func (r *Runner) runPipeline(ctx context.Context, rp *RunningPipeline, source So
 			rp.Metrics.ErrorsCount.Add(1)
 			r.db.CreatePipelineRunLog(rp.RunID, "error", fmt.Sprintf("Write batch failed: %v", err))
 			slog.Error("Pipeline batch write failed", "pipeline", rp.PipelineID, "error", err)
+			// Do NOT ack: the source keeps its position so these records are
+			// retried on the next run instead of being silently dropped.
 			continue
+		}
+
+		// Durable write succeeded — let the source commit its position.
+		if batch.Ack != nil {
+			batch.Ack()
 		}
 
 		rp.Metrics.RowsIngested.Add(int64(rows))

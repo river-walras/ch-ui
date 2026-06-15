@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2024-2026 Caio Ricciuti.
+// Part of CH-UI Pro. Licensed under the Business Source License 1.1 (see
+// LICENSE.BSL), NOT the Apache-2.0 LICENSE that governs the rest of the repo.
+
 package alerts
 
 import (
@@ -18,6 +23,7 @@ import (
 	"github.com/caioricciuti/ch-ui/internal/config"
 	"github.com/caioricciuti/ch-ui/internal/crypto"
 	"github.com/caioricciuti/ch-ui/internal/database"
+	"github.com/caioricciuti/ch-ui/internal/safe"
 )
 
 const (
@@ -65,6 +71,7 @@ func NewDispatcher(db *database.DB, cfg *config.Config) *Dispatcher {
 
 func (d *Dispatcher) Start() {
 	go func() {
+		defer safe.Recover("alert-dispatcher")
 		slog.Info("Alert dispatcher started", "interval", dispatchTickInterval)
 		ticker := time.NewTicker(dispatchTickInterval)
 		defer ticker.Stop()

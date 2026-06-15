@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2024-2026 Caio Ricciuti.
+// Part of CH-UI Pro. Licensed under the Business Source License 1.1 (see
+// LICENSE.BSL), NOT the Apache-2.0 LICENSE that governs the rest of the repo.
+
 package license
 
 import (
@@ -25,6 +30,12 @@ type LicenseFile struct {
 	Signature      string   `json:"signature"`
 }
 
+// GraceDays is the read-only grace window after a Pro license expires. During
+// this window the installation is no longer "active" (writes to Pro features are
+// blocked) but read-only access to Pro features — crucially, monitoring — keeps
+// working so an expiry never causes a hard lockout in the middle of an incident.
+const GraceDays = 14
+
 // LicenseInfo is the public-facing license status returned by the API.
 type LicenseInfo struct {
 	Edition   string `json:"edition"`
@@ -32,6 +43,12 @@ type LicenseInfo struct {
 	Customer  string `json:"customer,omitempty"`
 	ExpiresAt string `json:"expires_at,omitempty"`
 	LicenseID string `json:"license_id,omitempty"`
+	// InGrace is true when the license has expired but is still within the
+	// GraceDays read-only window. Valid is false in this state.
+	InGrace bool `json:"in_grace,omitempty"`
+	// GraceUntil is the RFC3339 timestamp when the grace window ends (only set
+	// when InGrace is true).
+	GraceUntil string `json:"grace_until,omitempty"`
 }
 
 // CommunityLicense returns the default community license info.
@@ -42,9 +59,24 @@ func CommunityLicense() *LicenseInfo {
 	}
 }
 
-// ValidateLicense parses and verifies a signed license JSON string.
-// Returns a LicenseInfo with Valid=true on success, or CommunityLicense() on any failure.
+// ValidateLicense parses and verifies a signed license JSON string against the
+// embedded public key. Returns a LicenseInfo with Valid=true on success, or
+// CommunityLicense() on any failure.
 func ValidateLicense(licenseJSON string) *LicenseInfo {
+	if licenseJSON == "" {
+		return CommunityLicense()
+	}
+	pub, err := parsePublicKey(publicKeyPEM)
+	if err != nil {
+		slog.Error("Failed to parse embedded public key", "error", err)
+		return CommunityLicense()
+	}
+	return validateLicenseWithKey(licenseJSON, pub)
+}
+
+// validateLicenseWithKey is the core validation routine, parameterized on the
+// verifying key so it can be exercised in tests with a generated keypair.
+func validateLicenseWithKey(licenseJSON string, pub ed25519.PublicKey) *LicenseInfo {
 	if licenseJSON == "" {
 		return CommunityLicense()
 	}
@@ -52,13 +84,6 @@ func ValidateLicense(licenseJSON string) *LicenseInfo {
 	var lf LicenseFile
 	if err := json.Unmarshal([]byte(licenseJSON), &lf); err != nil {
 		slog.Warn("License parse error", "error", err)
-		return CommunityLicense()
-	}
-
-	// Decode the embedded public key
-	pub, err := parsePublicKey(publicKeyPEM)
-	if err != nil {
-		slog.Error("Failed to parse embedded public key", "error", err)
 		return CommunityLicense()
 	}
 
@@ -85,13 +110,21 @@ func ValidateLicense(licenseJSON string) *LicenseInfo {
 	}
 
 	if expires.Before(time.Now()) {
-		slog.Warn("License expired", "expires_at", lf.ExpiresAt)
+		graceUntil := expires.AddDate(0, 0, GraceDays)
+		inGrace := time.Now().Before(graceUntil)
+		if inGrace {
+			slog.Warn("License expired — in read-only grace period", "expires_at", lf.ExpiresAt, "grace_until", graceUntil.Format(time.RFC3339))
+		} else {
+			slog.Warn("License expired", "expires_at", lf.ExpiresAt)
+		}
 		return &LicenseInfo{
-			Edition:   strings.ToLower(strings.TrimSpace(lf.Edition)),
-			Valid:     false,
-			Customer:  lf.Customer,
-			ExpiresAt: lf.ExpiresAt,
-			LicenseID: lf.LicenseID,
+			Edition:    strings.ToLower(strings.TrimSpace(lf.Edition)),
+			Valid:      false,
+			Customer:   lf.Customer,
+			ExpiresAt:  lf.ExpiresAt,
+			LicenseID:  lf.LicenseID,
+			InGrace:    inGrace,
+			GraceUntil: graceUntil.Format(time.RFC3339),
 		}
 	}
 

@@ -517,12 +517,12 @@ func (h *QueryHandler) EstimateQuery(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"success":      true,
-			"tables":       []interface{}{},
-			"total_rows":   0,
-			"total_parts":  0,
-			"total_marks":  0,
-			"error":        err.Error(),
+			"success":     true,
+			"tables":      []interface{}{},
+			"total_rows":  0,
+			"total_parts": 0,
+			"total_marks": 0,
+			"error":       err.Error(),
 		})
 		return
 	}

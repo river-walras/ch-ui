@@ -22,6 +22,40 @@ type Connection struct {
 	CreatedAt    string  `json:"created_at"`
 }
 
+// GetConnectionSSOAccount returns the per-connection ClickHouse service account
+// (username and encrypted password) used by OIDC SSO sessions. Empty strings
+// mean no service account is configured for the connection.
+func (db *DB) GetConnectionSSOAccount(connID string) (user string, encryptedPassword string, err error) {
+	var u, p sql.NullString
+	err = db.conn.QueryRow(
+		"SELECT sso_ch_user, sso_ch_password_encrypted FROM connections WHERE id = ?", connID,
+	).Scan(&u, &p)
+	if err == sql.ErrNoRows {
+		return "", "", nil
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("get connection sso account: %w", err)
+	}
+	return u.String, p.String, nil
+}
+
+// SetConnectionSSOAccount stores the ClickHouse service account credentials used
+// by OIDC SSO sessions for a connection. The password must already be encrypted.
+func (db *DB) SetConnectionSSOAccount(connID, user, encryptedPassword string) error {
+	res, err := db.conn.Exec(
+		"UPDATE connections SET sso_ch_user = ?, sso_ch_password_encrypted = ? WHERE id = ?",
+		user, encryptedPassword, connID,
+	)
+	if err != nil {
+		return fmt.Errorf("set connection sso account: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("connection not found: %s", connID)
+	}
+	return nil
+}
+
 // HostInfo represents the host machine metrics reported by the tunnel agent.
 type HostInfo struct {
 	Hostname    string  `json:"hostname"`

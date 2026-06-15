@@ -22,11 +22,11 @@ import (
 // AdminHandler handles admin-only routes for ClickHouse management.
 // All routes require the admin role, enforced by middleware.RequireAdmin.
 type AdminHandler struct {
-	DB            *database.DB
-	Gateway       *tunnel.Gateway
-	Config        *config.Config
-	GovSyncer     *governance.Syncer
-	GitHubSyncer  *ghclient.Syncer
+	DB           *database.DB
+	Gateway      *tunnel.Gateway
+	Config       *config.Config
+	GovSyncer    *governance.Syncer
+	GitHubSyncer *ghclient.Syncer
 }
 
 // Routes registers all admin routes on the given chi.Router.
@@ -792,4 +792,3 @@ func escapeString(s string) string {
 	s = strings.ReplaceAll(s, `_`, `\_`)
 	return s
 }
-

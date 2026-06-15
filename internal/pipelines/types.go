@@ -16,6 +16,11 @@ type Record struct {
 type Batch struct {
 	Records  []Record
 	SourceTS time.Time
+	// Ack, if non-nil, is called by the runner AFTER the batch has been durably
+	// written to the sink. Sources with committable positions (e.g. Kafka
+	// consumer offsets) use this to advance their offset only once the data is
+	// safely written, giving at-least-once delivery instead of at-most-once.
+	Ack func()
 }
 
 // ConnectorConfig is the parsed config for a connector node.

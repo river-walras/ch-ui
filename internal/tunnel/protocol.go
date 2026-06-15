@@ -51,14 +51,14 @@ func (m *AgentMessage) IsTestSuccess() bool {
 
 // GatewayMessage represents messages from the gateway to the tunnel agent.
 type GatewayMessage struct {
-	Type           string `json:"type"`
-	ConnectionID   string `json:"connectionId,omitempty"`   // auth_ok
-	ConnectionName string `json:"connectionName,omitempty"` // auth_ok
-	Message        string `json:"message,omitempty"`        // auth_error
-	ID             string `json:"id,omitempty"`             // legacy JS agent
-	QueryID        string `json:"query_id,omitempty"`       // Go agent
-	SQL            string `json:"sql,omitempty"`            // query (legacy)
-	Query          string `json:"query,omitempty"`          // query (Go agent)
+	Type           string            `json:"type"`
+	ConnectionID   string            `json:"connectionId,omitempty"`   // auth_ok
+	ConnectionName string            `json:"connectionName,omitempty"` // auth_ok
+	Message        string            `json:"message,omitempty"`        // auth_error
+	ID             string            `json:"id,omitempty"`             // legacy JS agent
+	QueryID        string            `json:"query_id,omitempty"`       // Go agent
+	SQL            string            `json:"sql,omitempty"`            // query (legacy)
+	Query          string            `json:"query,omitempty"`          // query (Go agent)
 	User           string            `json:"user,omitempty"`           // query, test
 	Password       string            `json:"password,omitempty"`       // query, test
 	Format         string            `json:"format,omitempty"`         // query
@@ -82,7 +82,7 @@ type TestResult struct {
 // StreamDone represents the final payload of a streaming query.
 type StreamDone struct {
 	Statistics json.RawMessage `json:"statistics"`
-	TotalRows  int64          `json:"total_rows"`
+	TotalRows  int64           `json:"total_rows"`
 }
 
 // HostInfo represents machine info from the agent.

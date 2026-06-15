@@ -9,10 +9,10 @@ import (
 
 // Setting keys for governance features.
 const (
-	SettingGovernanceSyncEnabled     = "governance.sync_enabled"
-	SettingGovernanceUpgradeBanner   = "governance.upgrade_banner_dismissed"
-	SettingGovernanceSyncUpdatedBy   = "governance.sync_updated_by"
-	SettingGovernanceSyncUpdatedAt   = "governance.sync_updated_at"
+	SettingGovernanceSyncEnabled   = "governance.sync_enabled"
+	SettingGovernanceUpgradeBanner = "governance.upgrade_banner_dismissed"
+	SettingGovernanceSyncUpdatedBy = "governance.sync_updated_by"
+	SettingGovernanceSyncUpdatedAt = "governance.sync_updated_at"
 )
 
 // GovernanceSyncEnabled reports whether admins have opted in to the governance

@@ -39,6 +39,9 @@ func (db *DB) CreateAuditLog(params AuditLogParams) error {
 	if err != nil {
 		return fmt.Errorf("create audit log: %w", err)
 	}
+	if db.OnAudit != nil {
+		db.OnAudit(params)
+	}
 	return nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/caioricciuti/ch-ui/internal/config"
+	"github.com/caioricciuti/ch-ui/internal/crypto"
 	"github.com/caioricciuti/ch-ui/internal/database"
 	"github.com/caioricciuti/ch-ui/internal/license"
 	"github.com/caioricciuti/ch-ui/internal/server/middleware"
@@ -48,6 +49,53 @@ func (h *ConnectionsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	connJSON(w, http.StatusOK, results)
+}
+
+// SetSSOAccount stores the ClickHouse service account that OIDC SSO sessions on
+// this connection will use for queries. Admin only.
+// PUT /{id}/sso-account  { "username": "...", "password": "..." }
+func (h *ConnectionsHandler) SetSSOAccount(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		connJSON(w, http.StatusBadRequest, map[string]string{"error": "Connection ID is required"})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		connJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Username == "" {
+		connJSON(w, http.StatusBadRequest, map[string]string{"error": "username is required"})
+		return
+	}
+
+	encrypted, err := crypto.Encrypt(req.Password, h.Config.AppSecretKey)
+	if err != nil {
+		slog.Error("Failed to encrypt SSO service account password", "error", err)
+		connJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to store credentials"})
+		return
+	}
+
+	if err := h.DB.SetConnectionSSOAccount(id, req.Username, encrypted); err != nil {
+		slog.Error("Failed to set SSO service account", "error", err, "id", id)
+		connJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to save SSO service account"})
+		return
+	}
+
+	h.DB.CreateAuditLog(database.AuditLogParams{
+		Action:       "connection.sso_account.set",
+		ConnectionID: strPtr(id),
+		Details:      strPtr(fmt.Sprintf("SSO ClickHouse service account set to %s", req.Username)),
+		IPAddress:    strPtr(getClientIP(r)),
+	})
+
+	connJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
 
 // Get returns a single connection by ID.

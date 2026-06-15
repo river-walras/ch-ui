@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2024-2026 Caio Ricciuti.
+// Part of CH-UI Pro. Licensed under the Business Source License 1.1 (see
+// LICENSE.BSL), NOT the Apache-2.0 LICENSE that governs the rest of the repo.
+
 package scheduler
 
 import (
@@ -10,6 +15,7 @@ import (
 	"github.com/caioricciuti/ch-ui/internal/alerts"
 	"github.com/caioricciuti/ch-ui/internal/crypto"
 	"github.com/caioricciuti/ch-ui/internal/database"
+	"github.com/caioricciuti/ch-ui/internal/safe"
 	"github.com/caioricciuti/ch-ui/internal/tunnel"
 )
 
@@ -39,6 +45,7 @@ func NewRunner(db *database.DB, gw *tunnel.Gateway, secret string) *Runner {
 // Start begins the runner goroutine that ticks every 30 seconds.
 func (r *Runner) Start() {
 	go func() {
+		defer safe.Recover("scheduler")
 		slog.Info("Schedule runner started", "interval", tickInterval)
 		ticker := time.NewTicker(tickInterval)
 		defer ticker.Stop()

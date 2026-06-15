@@ -8,8 +8,19 @@ import (
 	"github.com/google/uuid"
 )
 
+// schemaVersion is the current database schema version. Bump it (date-based)
+// whenever schema-affecting migrations are added below. It is recorded in the
+// settings table after a successful migration run for upgrade observability.
+const schemaVersion = "2026.06.12"
+
 func (db *DB) runMigrations() error {
-	slog.Info("Running database migrations...")
+	var prev string
+	_ = db.conn.QueryRow("SELECT value FROM settings WHERE key = 'schema_version'").Scan(&prev)
+	if prev != "" && prev != schemaVersion {
+		slog.Info("Running database migrations...", "from", prev, "to", schemaVersion)
+	} else {
+		slog.Info("Running database migrations...", "schema_version", schemaVersion)
+	}
 
 	stmts := []string{
 		// Installation settings (key-value store)
@@ -1019,6 +1030,19 @@ func (db *DB) runMigrations() error {
 		return err
 	}
 
+	// OIDC SSO: per-connection ClickHouse service account used by SSO sessions.
+	if err := db.ensureColumn("connections", "sso_ch_user", "TEXT"); err != nil {
+		return err
+	}
+	if err := db.ensureColumn("connections", "sso_ch_password_encrypted", "TEXT"); err != nil {
+		return err
+	}
+	// Sessions: the human identity (OIDC email) behind a session, when it differs
+	// from the ClickHouse login (which is the service account for SSO sessions).
+	if err := db.ensureColumn("sessions", "auth_subject", "TEXT"); err != nil {
+		return err
+	}
+
 	// Drop legacy tables from the old SaaS schema
 	dropLegacy := []string{
 		"DROP TABLE IF EXISTS organizations",
@@ -1079,7 +1103,16 @@ Formatting:
 		)
 	}
 
-	slog.Info("Database migrations completed")
+	// Record the applied schema version for upgrade observability.
+	if _, err := db.conn.Exec(
+		`INSERT INTO settings (key, value, updated_at) VALUES ('schema_version', ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+		schemaVersion,
+	); err != nil {
+		slog.Warn("Failed to record schema version", "error", err)
+	}
+
+	slog.Info("Database migrations completed", "schema_version", schemaVersion)
 	return nil
 }
 
