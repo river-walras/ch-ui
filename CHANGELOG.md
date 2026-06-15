@@ -5,6 +5,25 @@ All notable changes to CH-UI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-06-15
+
+### Security
+
+- Rebuild release binaries and the Docker image on Go 1.25.11, patching 23
+  standard-library vulnerabilities reachable from the codebase (crypto/x509,
+  crypto/tls, net/http, net/textproto, mime, net/url, os, …).
+- Bump `golang.org/x/net` to v0.56.0 (GO-2026-4918).
+
+### Fixed
+
+- CI: the backend job now compiles (a `//go:embed ui/dist` placeholder), so
+  `go vet`/`go test`/`govulncheck` actually run on every PR and push.
+
+### Changed
+
+- Bump GitHub Actions to Node 24-compatible versions (checkout v6, setup-go v6,
+  docker buildx v4 / login v4 / build-push v7).
+
 ## [2.5.0] - 2026-06-15
 
 ### Security
@@ -96,5 +115,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cluster Health (Pro): operations and database monitoring.
 - Result filters and ClickHouse error parsing in the query results view.
 
+[2.5.1]: https://github.com/caioricciuti/ch-ui/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/caioricciuti/ch-ui/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/caioricciuti/ch-ui/releases/tag/v2.4.0
