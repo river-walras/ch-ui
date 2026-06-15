@@ -27,6 +27,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # frontend.go embeds ui/dist via //go:embed; the backend job doesn't build
+      # the UI, so provide a placeholder file so the package compiles for
+      # vet/test/govulncheck. Real builds (Docker/release) embed the actual UI.
+      - name: Prepare embedded frontend placeholder
+        run: |
+          mkdir -p ui/dist
+          printf '<!doctype html><title>ch-ui</title>' > ui/dist/index.html
+
       - name: Check formatting
         run: |
           unformatted="$(gofmt -l ./cmd ./internal ./connector)"
