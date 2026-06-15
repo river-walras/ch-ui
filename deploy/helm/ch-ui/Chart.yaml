@@ -1,0 +1,17 @@
+apiVersion: v2
+name: ch-ui
+description: CH-UI — a self-hosted ClickHouse management UI
+type: application
+version: 0.1.0
+appVersion: "2.5.0"
+home: https://ch-ui.com
+sources:
+  - https://github.com/caioricciuti/ch-ui
+maintainers:
+  - name: Caio Ricciuti
+    email: me@caioricciuti.com
+keywords:
+  - clickhouse
+  - sql
+  - database
+  - ui

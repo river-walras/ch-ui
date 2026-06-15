@@ -27,9 +27,9 @@ rebuild:
 ## from-scratch: Alias for rebuild
 from-scratch: rebuild
 
-## build-frontend: Build the React frontend
+## build-frontend: Build the Svelte frontend
 build-frontend:
-	cd ui && bun install
+	cd ui && bun install --frozen-lockfile
 	@cd ui && (CHUI_VITE_MINIFY=true CHUI_VITE_REPORT_COMPRESSED=false bun run build || \
 		(echo "Frontend build was killed; retrying with low-memory profile (no minify)..." && \
 		CHUI_VITE_MINIFY=false CHUI_VITE_REPORT_COMPRESSED=false bun run build))
