@@ -60,4 +60,4 @@ We may update these terms. Continued use of the software after changes constitut
 
 ## 9. Contact
 
-For questions about these terms: **c.ricciuti@ch-ui.com**
+For questions about these terms: **me@caioricciuti.com**
