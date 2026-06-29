@@ -5,7 +5,7 @@ All notable changes to CH-UI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.5.3] - 2026-06-29
 
 ### Fixed
 
@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the effect that started it (#129).
 - `⌘/Ctrl+K` now toggles the command palette, so pressing it again closes the
   palette as the help text describes (#129).
+
+### Added
+
+- `docs/connecting-to-clickhouse.md` documenting the two supported ClickHouse
+  connection models — direct (`CLICKHOUSE_URL`, including reverse-proxied
+  `https://`) and the outbound tunnel (`ch-ui connect`) (#128).
 
 ## [2.5.2] - 2026-06-29
 
@@ -142,6 +148,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cluster Health (Pro): operations and database monitoring.
 - Result filters and ClickHouse error parsing in the query results view.
 
+[2.5.3]: https://github.com/caioricciuti/ch-ui/compare/v2.5.2...v2.5.3
+[2.5.2]: https://github.com/caioricciuti/ch-ui/compare/v2.5.1...v2.5.2
 [2.5.1]: https://github.com/caioricciuti/ch-ui/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/caioricciuti/ch-ui/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/caioricciuti/ch-ui/releases/tag/v2.4.0

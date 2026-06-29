@@ -2,8 +2,8 @@ apiVersion: v2
 name: ch-ui
 description: CH-UI — a self-hosted ClickHouse management UI
 type: application
-version: 0.1.2
-appVersion: "2.5.2"
+version: 0.1.3
+appVersion: "2.5.3"
 home: https://ch-ui.com
 sources:
   - https://github.com/caioricciuti/ch-ui
