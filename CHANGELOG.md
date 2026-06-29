@@ -5,6 +5,22 @@ All notable changes to CH-UI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-06-29
+
+### Fixed
+
+- Improve destructive-action alert contrast in the light theme so error and
+  delete-confirmation panels in the database explorer are legible (#111).
+
+### Changed
+
+- Bump the Go dependency group: `IBM/sarama` 1.47.0→1.50.3, `coreos/go-oidc/v3`
+  3.18.0→3.19.0, `go-chi/chi/v5` 5.2.5→5.3.0, `go-sql-driver/mysql`
+  1.9.3→1.10.0, `minio/minio-go/v7` 7.0.98→7.2.0, `lib/pq` 1.11.2→1.12.3,
+  `modernc.org/sqlite` 1.44.3→1.52.0, `fatih/color` 1.18.0→1.19.0 (#126).
+- Bump `@types/node` 25→26 in the UI dev dependencies (#127).
+- Bump `actions/checkout` 6→7 in the CI and release workflows (#125).
+
 ## [2.5.1] - 2026-06-15
 
 ### Security
