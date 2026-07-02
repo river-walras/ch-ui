@@ -30,25 +30,29 @@ type DashboardsHandler struct {
 func (h *DashboardsHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
+	// Writes require admin/analyst; viewers are read-only. Viewing dashboards and
+	// executing their panel queries stays open (governed by ClickHouse grants).
+	writer := middleware.RequireWriter()
+
 	r.Get("/", h.ListDashboards)
-	r.Post("/", h.CreateDashboard)
+	r.With(writer).Post("/", h.CreateDashboard)
 	r.Post("/query", h.ExecutePanelQuery)
 
 	r.Route("/{id}", func(r chi.Router) {
 		r.Get("/", h.GetDashboard)
-		r.Put("/", h.UpdateDashboard)
-		r.Delete("/", h.DeleteDashboard)
+		r.With(writer).Put("/", h.UpdateDashboard)
+		r.With(writer).Delete("/", h.DeleteDashboard)
 
 		// Panel CRUD
-		r.Post("/panels", h.CreatePanel)
-		r.Put("/panels/{panelId}", h.UpdatePanel)
-		r.Delete("/panels/{panelId}", h.DeletePanel)
+		r.With(writer).Post("/panels", h.CreatePanel)
+		r.With(writer).Put("/panels/{panelId}", h.UpdatePanel)
+		r.With(writer).Delete("/panels/{panelId}", h.DeletePanel)
 
 		// Sharing
 		r.Get("/shares", h.ListShares)
-		r.Post("/shares", h.CreateShare)
-		r.Delete("/shares/{shareId}", h.DeleteShare)
-		r.Post("/shares/{shareId}/invite", h.InviteToShare)
+		r.With(writer).Post("/shares", h.CreateShare)
+		r.With(writer).Delete("/shares/{shareId}", h.DeleteShare)
+		r.With(writer).Post("/shares/{shareId}/invite", h.InviteToShare)
 	})
 
 	return r

@@ -2,11 +2,11 @@ package connector
 
 // GatewayMessage represents messages received from the CH-UI tunnel server.
 type GatewayMessage struct {
-	Type     string `json:"type"`               // Message type: auth_ok, auth_error, query, query_stream, ping, cancel_query, test_connection
-	QueryID  string `json:"query_id,omitempty"` // Query identifier
-	Query    string `json:"query,omitempty"`    // SQL query to execute
-	User     string `json:"user,omitempty"`     // ClickHouse username for this query
-	Password string `json:"password,omitempty"` // ClickHouse password for this query
+	Type     string            `json:"type"`               // Message type: auth_ok, auth_error, query, query_stream, ping, cancel_query, test_connection
+	QueryID  string            `json:"query_id,omitempty"` // Query identifier
+	Query    string            `json:"query,omitempty"`    // SQL query to execute
+	User     string            `json:"user,omitempty"`     // ClickHouse username for this query
+	Password string            `json:"password,omitempty"` // ClickHouse password for this query
 	Format   string            `json:"format,omitempty"`   // ClickHouse output format (JSONCompact, stream, etc.)
 	Error    string            `json:"error,omitempty"`    // Error message (for auth_error)
 	Message  string            `json:"message,omitempty"`  // Additional message info

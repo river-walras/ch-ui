@@ -50,17 +50,17 @@ type PipelineEdge struct {
 
 // PipelineRun represents an execution run of a pipeline.
 type PipelineRun struct {
-	ID           string  `json:"id"`
-	PipelineID   string  `json:"pipeline_id"`
-	Status       string  `json:"status"`
-	StartedAt    string  `json:"started_at"`
-	FinishedAt   *string `json:"finished_at"`
-	RowsIngested int64   `json:"rows_ingested"`
-	BytesIngested int64  `json:"bytes_ingested"`
-	ErrorsCount  int64   `json:"errors_count"`
-	LastError    *string `json:"last_error"`
-	MetricsJSON  string  `json:"metrics_json"`
-	CreatedAt    string  `json:"created_at"`
+	ID            string  `json:"id"`
+	PipelineID    string  `json:"pipeline_id"`
+	Status        string  `json:"status"`
+	StartedAt     string  `json:"started_at"`
+	FinishedAt    *string `json:"finished_at"`
+	RowsIngested  int64   `json:"rows_ingested"`
+	BytesIngested int64   `json:"bytes_ingested"`
+	ErrorsCount   int64   `json:"errors_count"`
+	LastError     *string `json:"last_error"`
+	MetricsJSON   string  `json:"metrics_json"`
+	CreatedAt     string  `json:"created_at"`
 }
 
 // PipelineRunLog represents a log entry for a pipeline run.

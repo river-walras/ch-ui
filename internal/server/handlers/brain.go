@@ -1567,4 +1567,3 @@ func isBrainReadOnlyQuery(query string) bool {
 	re := regexp.MustCompile(`(?is)^\s*(SELECT|WITH|SHOW|DESC|DESCRIBE|EXPLAIN)\b`)
 	return re.MatchString(query)
 }
-

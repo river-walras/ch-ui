@@ -27,7 +27,9 @@ You can use, modify, and distribute CH-UI Core freely under the Apache 2.0 licen
 
 ## CH-UI Pro
 
-**License:** Commercial (proprietary)
+**License:** [Business Source License 1.1](../LICENSE.BSL) (source-available; production use requires a valid CH-UI Pro license; converts to Apache 2.0 on the Change Date).
+
+The Pro source is published in this repository under BSL 1.1 — every Pro source file carries an `SPDX-License-Identifier: BUSL-1.1` header. See [`LICENSING.md`](../LICENSING.md) for the authoritative list of Pro paths and the exact terms. All other code is Apache 2.0.
 
 Pro modules extend CH-UI with enterprise features:
 
@@ -47,7 +49,7 @@ Pro features require a valid license file. Licenses are per-deployment and inclu
 
 ### How to get a license
 
-Visit [ch-ui.com/pricing](https://ch-ui.com/pricing) or contact **c.ricciuti@ch-ui.com**.
+Visit [ch-ui.com/pricing](https://ch-ui.com/pricing) or contact **me@caioricciuti.com**.
 
 ## License boundary
 

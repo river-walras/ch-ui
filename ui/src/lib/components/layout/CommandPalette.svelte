@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { tick, onMount } from 'svelte'
+  import { tick, onMount, untrack } from 'svelte'
   import {
     Search, Plus, Table2, Sparkles, LayoutDashboard, Bookmark, Clock,
     Brain, Shield, Settings, Moon, Sun, LogOut, SquareTerminal, Home,
     Workflow, Boxes, Activity, FileText, GitBranch, ChartBar,
-    Network, KeyRound, Scale, MessageSquare,
+    Network, KeyRound, Scale, MessageSquare, HeartPulse, Gauge,
     Cpu, Info, Hash, Zap,
   } from 'lucide-svelte'
   import { closeCommandPalette, isCommandPaletteOpen } from '../../stores/command-palette.svelte'
@@ -75,7 +75,7 @@
   let scopeGroup = $state<Group | null>(null)
 
   let savedQueries = $state<Array<{ id: string; name: string; description?: string | null }>>([])
-  let dashboards = $state<Array<{ id: string; name: string; description?: string }>>([])
+  let dashboards = $state<Array<{ id: string; name: string; description?: string | null }>>([])
   let models = $state<Array<{ id: string; name: string; description?: string | null; target_database?: string }>>([])
   let pipelines = $state<Array<{ id: string; name: string; description?: string | null; status?: string }>>([])
   let brainChats = $state<Array<{ id: string; title: string }>>([])
@@ -119,6 +119,8 @@
       mkPage('pipelines', 'Pipelines', Workflow, () => openSingletonTab('pipelines', 'Pipelines'), { keywords: 'ingest etl streams' }),
       mkPage('models', 'Models', Boxes, () => openSingletonTab('models', 'Models'), { keywords: 'dbt models materialize' }),
       mkPage('governance', 'Governance', Scale, () => openSingletonTab('governance', 'Governance'), { keywords: 'access policies rules audit' }),
+      mkPage('cluster-health', 'Cluster Health', HeartPulse, () => openSingletonTab('cluster-health', 'Cluster Health'), { keywords: 'replication merges mutations parts keeper backups monitoring' }),
+      mkPage('query-insights', 'Query Insights', Gauge, () => openSingletonTab('query-insights', 'Query Insights'), { keywords: 'query log latency slow p95 errors memory insights analytics' }),
       mkPage('telemetry', 'Telemetry', Activity, () => openSingletonTab('telemetry', 'Telemetry'), { keywords: 'otel observability logs traces metrics' }),
       mkPage('admin', 'Admin', Shield, () => openSingletonTab('admin', 'Admin'), { keywords: 'users audit query log' }),
       mkPage('settings', 'Settings', Settings, () => openSingletonTab('settings', 'Settings'), { keywords: 'config preferences license' }),
@@ -524,11 +526,17 @@
 
   $effect(() => {
     if (!open) return
-    query = ''
-    selectedIdx = 0
-    scopeGroup = null
-    loadAll()
-    tick().then(() => inputEl?.focus())
+    // Run the open routine untracked: loadAll() mutates the databases/data
+    // stores, and without untrack the effect would subscribe to its own writes
+    // and re-run forever (effect_update_depth_exceeded). The only dependency we
+    // want here is `open` flipping to true.
+    untrack(() => {
+      query = ''
+      selectedIdx = 0
+      scopeGroup = null
+      loadAll()
+      tick().then(() => inputEl?.focus())
+    })
   })
 
   const scopeChip = $derived.by(() => {

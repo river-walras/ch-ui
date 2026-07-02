@@ -23,6 +23,11 @@ func nullStringToPtr(ns sql.NullString) *string {
 type DB struct {
 	conn *sql.DB
 	path string
+
+	// OnAudit, if set, is invoked after each audit log row is written. The
+	// server uses it to forward events to external sinks (SIEM). It must not
+	// block; forwarding is handled asynchronously inside the callback.
+	OnAudit func(AuditLogParams)
 }
 
 // Open opens the SQLite database at the given path, runs migrations, and returns a DB.

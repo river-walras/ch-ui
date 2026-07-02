@@ -25,12 +25,16 @@ type SavedQueriesHandler struct {
 
 // Routes registers saved query routes on the given router.
 func (h *SavedQueriesHandler) Routes(r chi.Router) {
+	// Writes require admin/analyst; viewers are read-only (they can still list,
+	// view, and run saved queries).
+	writer := middleware.RequireWriter()
+
 	r.Get("/", h.List)
 	r.Get("/{id}", h.Get)
-	r.Post("/", h.Create)
-	r.Put("/{id}", h.Update)
-	r.Delete("/{id}", h.Delete)
-	r.Post("/{id}/duplicate", h.Duplicate)
+	r.With(writer).Post("/", h.Create)
+	r.With(writer).Put("/{id}", h.Update)
+	r.With(writer).Delete("/{id}", h.Delete)
+	r.With(writer).Post("/{id}/duplicate", h.Duplicate)
 	// Executing a saved query with bind parameters is a Pro feature.
 	if h.Config != nil {
 		r.With(middleware.RequirePro(h.Config)).Post("/{id}/run", h.Run)

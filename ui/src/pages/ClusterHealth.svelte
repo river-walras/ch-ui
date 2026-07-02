@@ -15,6 +15,9 @@
     HardDrive,
     Network,
     Archive,
+    Search,
+    X,
+    Funnel,
   } from 'lucide-svelte'
   import {
     fetchSummary,
@@ -28,7 +31,7 @@
     type LiveSection,
     type ClusterHealthSettings,
   } from '../lib/api/clusterHealth'
-  import MiniTrendChart from '../lib/components/common/MiniTrendChart.svelte'
+  import TrendChart from '../lib/components/common/TrendChart.svelte'
   import Modal from '../lib/components/common/Modal.svelte'
   import { success as toastSuccess, error as toastError } from '../lib/stores/toast.svelte'
 
@@ -48,6 +51,26 @@
   let activeSection = $state<LiveSection>('replication')
   let sectionResult = $state<LiveResult | null>(null)
   let sectionLoading = $state(false)
+
+  // ── Filters (client-side: section rows are already loaded and capped) ──────
+  let nodeFilter = $state<string | null>(null)
+  let searchFilter = $state('')
+  let historyRange = $state<'1h' | '6h' | '24h' | '7d'>('6h')
+  const HISTORY_RANGES: Array<'1h' | '6h' | '24h' | '7d'> = ['1h', '6h', '24h', '7d']
+
+  const hasFilters = $derived(nodeFilter !== null || searchFilter.trim() !== '')
+
+  function clearFilters() {
+    nodeFilter = null
+    searchFilter = ''
+  }
+
+  function rowMatchesFilters(row: Record<string, unknown>): boolean {
+    if (nodeFilter && String(row.node ?? '') !== nodeFilter) return false
+    const q = searchFilter.trim().toLowerCase()
+    if (!q) return true
+    return Object.values(row).some((v) => v != null && String(v).toLowerCase().includes(q))
+  }
 
   const UI_REFRESH_MS = 20000
   let timer: ReturnType<typeof setInterval> | null = null
@@ -210,8 +233,11 @@
 
   // ── Derived aggregates ─────────────────────────────────────────────────────
   const nodes = $derived(summary?.nodes ?? [])
+  // Tiles, the node table and the trend charts all respect the node filter, so
+  // funnelling a node shows that node's health at a glance.
+  const filteredNodes = $derived(nodeFilter ? nodes.filter((n) => n.node === nodeFilter) : nodes)
   const agg = $derived.by(() => {
-    const list = nodes
+    const list = filteredNodes
     const max = (f: (n: NodeSample) => number) => list.reduce((m, n) => Math.max(m, f(n) || 0), 0)
     const sum = (f: (n: NodeSample) => number) => list.reduce((m, n) => m + (f(n) || 0), 0)
     return {
@@ -242,22 +268,37 @@
     return 'border-gray-200 dark:border-gray-800'
   }
 
-  // ── Trend series (aggregate across nodes per timestamp) ────────────────────
-  function buildSeries(metric: (n: NodeSample) => number): { x: number[]; y: number[] } {
-    const byTime = new Map<string, number>()
-    for (const s of history) {
-      const v = metric(s) || 0
-      const cur = byTime.get(s.captured_at)
-      byTime.set(s.captured_at, cur === undefined ? v : Math.max(cur, v))
-    }
-    const times = Array.from(byTime.keys()).sort()
+  // ── Trend series (one series per node, aligned on captured_at) ─────────────
+  const NODE_COLORS = ['#f97316', '#0ea5e9', '#10b981', '#a855f7', '#f59e0b', '#ec4899', '#84cc16', '#ef4444']
+
+  function buildNodeSeries(metric: (n: NodeSample) => number) {
+    const samples = nodeFilter ? history.filter((s) => s.node === nodeFilter) : history
+    const times = Array.from(new Set(samples.map((s) => s.captured_at))).sort()
+    const timeIdx = new Map(times.map((t, i) => [t, i]))
+    const nodeNames = Array.from(new Set(samples.map((s) => s.node))).sort()
+
+    const series = nodeNames.map((name, ni) => {
+      const values: (number | null)[] = times.map(() => null)
+      for (const s of samples) {
+        if (s.node !== name) continue
+        const idx = timeIdx.get(s.captured_at)
+        if (idx !== undefined) values[idx] = metric(s) || 0
+      }
+      return {
+        label: name,
+        values,
+        color: NODE_COLORS[ni % NODE_COLORS.length],
+        fill: nodeNames.length === 1 ? `${NODE_COLORS[ni % NODE_COLORS.length]}24` : undefined,
+      }
+    })
+
     return {
-      x: times.map((_, i) => i),
-      y: times.map(t => byTime.get(t) ?? 0),
+      x: times.map((t) => Math.floor(Date.parse(t) / 1000)),
+      series,
     }
   }
-  const delaySeries = $derived(buildSeries(n => n.replication_max_delay))
-  const partsSeries = $derived(buildSeries(n => n.parts_pressure_pct))
+  const delayChart = $derived(buildNodeSeries((n) => n.replication_max_delay))
+  const partsChart = $derived(buildNodeSeries((n) => n.parts_pressure_pct))
 
   // ── Formatting ─────────────────────────────────────────────────────────────
   function fmtNum(v: unknown): string {
@@ -289,11 +330,17 @@
 
   async function loadHistory() {
     try {
-      const res = await fetchHistory('6h')
+      const res = await fetchHistory(historyRange)
       history = res.data ?? []
     } catch {
       // history is best-effort; ignore failures
     }
+  }
+
+  function setHistoryRange(r: '1h' | '6h' | '24h' | '7d') {
+    if (historyRange === r) return
+    historyRange = r
+    void loadHistory()
   }
 
   async function loadSection(section: LiveSection) {
@@ -369,7 +416,9 @@
 <div class="flex flex-col h-full overflow-hidden">
   <!-- Header -->
   <div class="ds-page-header">
-    <div class="flex items-center justify-between gap-4">
+    <!-- w-full: ds-page-header is itself flex, so this wrapper must stretch
+         for justify-between to push the controls to the far right. -->
+    <div class="w-full flex items-center justify-between gap-4">
       <div class="flex items-center gap-3 min-w-0">
         <HeartPulse size={20} class="text-ch-orange shrink-0" />
         <div class="min-w-0">
@@ -402,6 +451,70 @@
           <Settings2 size={14} /> Settings
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Filter bar: node + search filters apply to tiles, charts and sections -->
+  <div class="flex items-center gap-2 flex-wrap px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40">
+    <div class="relative">
+      <Search size={13} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+      <input
+        class="w-64 pl-8 pr-7 py-1.5 text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-700 dark:text-gray-200 focus:outline-none focus:border-ch-blue"
+        placeholder="Filter rows (table, database, reason...)"
+        bind:value={searchFilter}
+        spellcheck="false"
+      />
+      {#if searchFilter}
+        <button
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          onclick={() => (searchFilter = '')}
+          aria-label="Clear search"
+        >
+          <X size={13} />
+        </button>
+      {/if}
+    </div>
+
+    {#if nodes.length > 1}
+      <select
+        class="px-2 py-1.5 text-xs rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-700 dark:text-gray-200 focus:outline-none focus:border-ch-blue"
+        value={nodeFilter ?? ''}
+        onchange={(e) => (nodeFilter = e.currentTarget.value || null)}
+      >
+        <option value="">All nodes</option>
+        {#each nodes as n}
+          <option value={n.node}>{n.node}</option>
+        {/each}
+      </select>
+    {/if}
+
+    {#if nodeFilter}
+      <span class="inline-flex items-center gap-1 pl-1.5 pr-0.5 py-0.5 text-[11px] rounded-md border border-orange-200/70 dark:border-orange-500/25 bg-orange-100/60 dark:bg-orange-500/10 text-orange-800 dark:text-orange-300">
+        <Server size={10} class="shrink-0" />
+        <span class="font-mono">{nodeFilter}</span>
+        <button class="p-0.5 rounded hover:bg-orange-200/70 dark:hover:bg-orange-500/20" onclick={() => (nodeFilter = null)} aria-label="Remove node filter">
+          <X size={10} />
+        </button>
+      </span>
+    {/if}
+
+    {#if hasFilters}
+      <button
+        class="px-1.5 py-0.5 text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 rounded hover:bg-gray-200 dark:hover:bg-gray-800"
+        onclick={clearFilters}
+      >Clear all</button>
+    {/if}
+
+    <div class="flex-1"></div>
+
+    <!-- Trend history range -->
+    <div class="ds-segment">
+      {#each HISTORY_RANGES as r}
+        <button
+          class="ds-segment-btn {historyRange === r ? 'ds-segment-btn-active' : ''}"
+          onclick={() => setHistoryRange(r)}
+        >{r}</button>
+      {/each}
     </div>
   </div>
 
@@ -455,22 +568,28 @@
         </div>
       </div>
 
-      <!-- Trends -->
-      {#if history.length > 1}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="ds-card p-3">
-            <div class="text-xs text-gray-500 mb-2 flex items-center gap-2"><GitBranch size={13} /> Max replication delay · last 6h</div>
-            <MiniTrendChart x={delaySeries.x} y={delaySeries.y} height={110} />
-          </div>
-          <div class="ds-card p-3">
-            <div class="text-xs text-gray-500 mb-2 flex items-center gap-2"><Database size={13} /> Parts pressure % · last 6h</div>
-            <MiniTrendChart x={partsSeries.x} y={partsSeries.y} height={110} color="#0ea5e9" fill="rgba(14,165,233,0.16)" />
-          </div>
+      <!-- Trends (one series per node) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="ds-card p-3">
+          <div class="text-xs text-gray-500 mb-2 flex items-center gap-2"><GitBranch size={13} /> Replication delay · last {historyRange}</div>
+          {#if delayChart.x.length > 1}
+            <TrendChart x={delayChart.x} series={delayChart.series} height={150} yLabel="seconds" formatY={(v) => `${Math.round(v)}s`} />
+          {:else}
+            <div class="h-[150px] grid place-items-center text-xs text-gray-400">Not enough history yet — samples arrive as the harvester polls</div>
+          {/if}
         </div>
-      {/if}
+        <div class="ds-card p-3">
+          <div class="text-xs text-gray-500 mb-2 flex items-center gap-2"><Database size={13} /> Parts pressure · last {historyRange}</div>
+          {#if partsChart.x.length > 1}
+            <TrendChart x={partsChart.x} series={partsChart.series} height={150} yLabel="% of limit" formatY={(v) => `${Math.round(v)}%`} />
+          {:else}
+            <div class="h-[150px] grid place-items-center text-xs text-gray-400">Not enough history yet — samples arrive as the harvester polls</div>
+          {/if}
+        </div>
+      </div>
 
       <!-- Per-node table -->
-      {#if nodes.length > 0}
+      {#if filteredNodes.length > 0}
         <div class="ds-table-wrap">
           <table class="ds-table">
             <thead>
@@ -486,9 +605,23 @@
               </tr>
             </thead>
             <tbody>
-              {#each nodes as n}
+              {#each filteredNodes as n}
                 <tr class="ds-table-row">
-                  <td class="ds-td-mono">{n.node}</td>
+                  <td class="ds-td-mono">
+                    <span class="inline-flex items-center gap-1">
+                      {n.node}
+                      {#if nodes.length > 1 && !nodeFilter}
+                        <button
+                          class="opacity-40 hover:opacity-100 transition-opacity"
+                          onclick={() => (nodeFilter = n.node)}
+                          title="Filter the page by this node"
+                          aria-label={`Filter by node ${n.node}`}
+                        >
+                          <Funnel size={11} />
+                        </button>
+                      {/if}
+                    </span>
+                  </td>
                   <td class="ds-td-right">
                     <span class="ds-badge {badgeClass(band(n.replication_max_delay, 10, 60))}">{n.replication_max_delay}</span>
                   </td>
@@ -529,33 +662,46 @@
         {:else if sectionResult && sectionResult.data.length === 0}
           <div class="ds-empty">{activeSpec.empty}</div>
         {:else if sectionResult}
+          {@const visibleRows = sectionResult.data.filter(rowMatchesFilters)}
           {#if sectionResult.degraded}
             <div class="text-[11px] text-amber-600 dark:text-amber-500 mb-2 flex items-center gap-1.5">
               <AlertTriangle size={12} /> Showing local node only — remote nodes were unreachable.
             </div>
           {/if}
-          <div class="ds-table-wrap">
-            <table class="ds-table">
-              <thead>
-                <tr class="ds-table-head-row">
-                  {#each activeSpec.columns as col}
-                    <th class="ds-table-th">{col.label}</th>
-                  {/each}
-                </tr>
-              </thead>
-              <tbody>
-                {#each sectionResult.data as row}
-                  <tr class="ds-table-row">
+          {#if visibleRows.length === 0}
+            <div class="ds-panel-muted p-4 text-sm text-gray-500 flex items-center gap-2">
+              No rows match the current filters.
+              <button class="text-ch-blue hover:underline" onclick={clearFilters}>Clear filters</button>
+            </div>
+          {:else}
+            {#if visibleRows.length < sectionResult.data.length}
+              <div class="text-[11px] text-gray-400 mb-2">
+                Showing {visibleRows.length} of {sectionResult.data.length} rows
+              </div>
+            {/if}
+            <div class="ds-table-wrap">
+              <table class="ds-table">
+                <thead>
+                  <tr class="ds-table-head-row">
                     {#each activeSpec.columns as col}
-                      <td class={col.mono ? 'ds-td-mono max-w-xs truncate' : 'ds-td'} title={cell(row, col.key)}>
-                        {cell(row, col.key)}
-                      </td>
+                      <th class="ds-table-th">{col.label}</th>
                     {/each}
                   </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {#each visibleRows as row}
+                    <tr class="ds-table-row">
+                      {#each activeSpec.columns as col}
+                        <td class={col.mono ? 'ds-td-mono max-w-xs truncate' : 'ds-td'} title={cell(row, col.key)}>
+                          {cell(row, col.key)}
+                        </td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
         {/if}
       </div>
 

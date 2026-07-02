@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2024-2026 Caio Ricciuti.
+// Part of CH-UI Pro. Licensed under the Business Source License 1.1 (see
+// LICENSE.BSL), NOT the Apache-2.0 LICENSE that governs the rest of the repo.
+
 package governance
 
 import (
@@ -10,6 +15,7 @@ import (
 
 	"github.com/caioricciuti/ch-ui/internal/crypto"
 	"github.com/caioricciuti/ch-ui/internal/database"
+	"github.com/caioricciuti/ch-ui/internal/safe"
 	"github.com/caioricciuti/ch-ui/internal/tunnel"
 )
 
@@ -24,15 +30,15 @@ const (
 // It runs periodic background syncs and supports on-demand sync for
 // individual connections.
 type Syncer struct {
-	store          *Store
-	db             *database.DB
-	gateway        *tunnel.Gateway
-	secret         string
-	activeSyncs    sync.Map     // connectionID → bool (prevents concurrent syncs per connection)
-	lastBorrowLog  sync.Map     // connectionID → time.Time (rate-limits credential borrow audit rows)
-	mu             sync.Mutex
-	running        bool
-	stopCh         chan struct{}
+	store         *Store
+	db            *database.DB
+	gateway       *tunnel.Gateway
+	secret        string
+	activeSyncs   sync.Map // connectionID → bool (prevents concurrent syncs per connection)
+	lastBorrowLog sync.Map // connectionID → time.Time (rate-limits credential borrow audit rows)
+	mu            sync.Mutex
+	running       bool
+	stopCh        chan struct{}
 }
 
 // NewSyncer creates a new governance Syncer.
@@ -65,6 +71,7 @@ func (s *Syncer) StartBackground() {
 	s.mu.Unlock()
 
 	go func() {
+		defer safe.Recover("governance-syncer")
 		slog.Info("Governance syncer started", "interval", syncTickInterval)
 
 		if connections, err := s.db.GetConnections(); err == nil {

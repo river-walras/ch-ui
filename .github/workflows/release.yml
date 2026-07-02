@@ -12,6 +12,7 @@ env:
 permissions:
   contents: write
   packages: write
+  id-token: write # keyless cosign signing via OIDC
 
 concurrency:
   group: release-${{ github.ref }}
@@ -22,12 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
+          cache: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -62,6 +64,24 @@ jobs:
         run: |
           sha256sum ch-ui-* > checksums.txt
           cat checksums.txt
+
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/ch-ui-sbom.cyclonedx.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign checksums (keyless)
+        working-directory: dist
+        run: |
+          cosign sign-blob --yes \
+            --output-signature checksums.txt.sig \
+            --output-certificate checksums.txt.pem \
+            checksums.txt
 
       - name: Create or update GitHub Release
         env:
@@ -109,10 +129,13 @@ jobs:
             dist/ch-ui-darwin-amd64 \
             dist/ch-ui-darwin-arm64 \
             dist/checksums.txt \
+            dist/checksums.txt.sig \
+            dist/checksums.txt.pem \
+            dist/ch-ui-sbom.cyclonedx.json \
             --clobber
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Verify GHCR credentials
         env:
@@ -124,19 +147,22 @@ jobs:
           fi
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        id: docker_build
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
+          provenance: true
+          sbom: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
@@ -144,3 +170,10 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Sign Docker image (keyless)
+        env:
+          DIGEST: ${{ steps.docker_build.outputs.digest }}
+        run: |
+          cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+        # REGISTRY and IMAGE_NAME come from the workflow env block.

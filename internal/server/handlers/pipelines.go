@@ -28,20 +28,23 @@ type PipelinesHandler struct {
 func (h *PipelinesHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
+	// Writes and lifecycle control require admin/analyst; viewers are read-only.
+	writer := middleware.RequireWriter()
+
 	r.Get("/", h.ListPipelines)
-	r.Post("/", h.CreatePipeline)
+	r.With(writer).Post("/", h.CreatePipeline)
 
 	r.Route("/{id}", func(r chi.Router) {
 		r.Get("/", h.GetPipeline)
-		r.Put("/", h.UpdatePipeline)
-		r.Delete("/", h.DeletePipeline)
+		r.With(writer).Put("/", h.UpdatePipeline)
+		r.With(writer).Delete("/", h.DeletePipeline)
 
 		// Graph operations
-		r.Put("/graph", h.SaveGraph)
+		r.With(writer).Put("/graph", h.SaveGraph)
 
 		// Lifecycle
-		r.Post("/start", h.StartPipeline)
-		r.Post("/stop", h.StopPipeline)
+		r.With(writer).Post("/start", h.StartPipeline)
+		r.With(writer).Post("/stop", h.StopPipeline)
 
 		// Status & monitoring
 		r.Get("/status", h.GetStatus)

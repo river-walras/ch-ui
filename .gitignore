@@ -45,8 +45,9 @@ ui/dist/
 *.db-wal
 
 
-# Go binary (built by Makefile)
-ch-ui
+# Go binary (built by Makefile) — anchored to repo root so it does not match
+# the deploy/helm/ch-ui chart directory.
+/ch-ui
 
 .claude
 

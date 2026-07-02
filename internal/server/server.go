@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/caioricciuti/ch-ui/internal/alerts"
+	"github.com/caioricciuti/ch-ui/internal/audit"
 	"github.com/caioricciuti/ch-ui/internal/clusterhealth"
 	"github.com/caioricciuti/ch-ui/internal/config"
 	"github.com/caioricciuti/ch-ui/internal/database"
 	ghclient "github.com/caioricciuti/ch-ui/internal/github"
 	"github.com/caioricciuti/ch-ui/internal/governance"
 	"github.com/caioricciuti/ch-ui/internal/models"
+	"github.com/caioricciuti/ch-ui/internal/oidc"
 	"github.com/caioricciuti/ch-ui/internal/pipelines"
 	"github.com/caioricciuti/ch-ui/internal/scheduler"
 	"github.com/caioricciuti/ch-ui/internal/server/handlers"
@@ -38,6 +40,8 @@ type Server struct {
 	githubSyncer   *ghclient.Syncer
 	guardrails     *governance.GuardrailService
 	alerts         *alerts.Dispatcher
+	auditFwd       *audit.Forwarder
+	oidcProvider   *oidc.Provider
 	router         chi.Router
 	http           *http.Server
 	frontendFS     fs.FS
@@ -59,6 +63,42 @@ func New(cfg *config.Config, db *database.DB, frontendFS fs.FS) *Server {
 	githubSyncer := ghclient.NewSyncer(db, cfg.AppSecretKey)
 	alertDispatcher := alerts.NewDispatcher(db, cfg)
 
+	// Initialize OIDC SSO if configured. Discovery hits the network, so bound it
+	// with a timeout; on failure we log and continue with OIDC disabled rather
+	// than refusing to start.
+	var oidcProvider *oidc.Provider
+	if cfg.OIDCEnabled() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		p, err := oidc.New(ctx, cfg)
+		cancel()
+		if err != nil {
+			slog.Error("OIDC SSO disabled — provider discovery failed", "issuer", cfg.OIDCIssuerURL, "error", err)
+		} else {
+			oidcProvider = p
+			slog.Info("OIDC SSO enabled", "issuer", cfg.OIDCIssuerURL)
+		}
+	}
+
+	// Wire audit forwarding (SIEM) if any sink is configured. This is a Pro
+	// feature; on a community (or fully expired) license it stays off.
+	var auditFwd *audit.Forwarder
+	if cfg.ProAccess() != config.ProNone {
+		auditFwd = buildAuditForwarder(cfg)
+	} else if cfg.AuditWebhookURL != "" || cfg.AuditLogFile != "" || cfg.AuditForwardStdout {
+		slog.Warn("Audit forwarding (SIEM) is configured but requires a Pro license — not enabled")
+	}
+	if auditFwd != nil {
+		db.OnAudit = func(p database.AuditLogParams) {
+			auditFwd.Emit(audit.Event{
+				Action:       p.Action,
+				Username:     deref(p.Username),
+				ConnectionID: deref(p.ConnectionID),
+				Details:      deref(p.Details),
+				IPAddress:    deref(p.IPAddress),
+			})
+		}
+	}
+
 	s := &Server{
 		cfg:            cfg,
 		db:             db,
@@ -72,6 +112,8 @@ func New(cfg *config.Config, db *database.DB, frontendFS fs.FS) *Server {
 		githubSyncer:   githubSyncer,
 		guardrails:     governance.NewGuardrailService(govStore, db),
 		alerts:         alertDispatcher,
+		auditFwd:       auditFwd,
+		oidcProvider:   oidcProvider,
 		router:         r,
 		frontendFS:     frontendFS,
 	}
@@ -96,6 +138,8 @@ func (s *Server) setupRoutes() {
 	gw := s.gateway
 
 	// ── Global middleware ────────────────────────────────────────────────
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Metrics)
 	r.Use(middleware.Logger)
 	r.Use(middleware.SecurityHeaders(!cfg.DevMode))
 	r.Use(middleware.CORS(middleware.CORSConfig{
@@ -103,10 +147,16 @@ func (s *Server) setupRoutes() {
 		AllowedOrigins: cfg.AllowedOrigins,
 		AppURL:         cfg.AppURL,
 	}))
+	// Outer request-body bound (32MB). Uploads (25MB) and webhooks (10MB) set
+	// their own stricter limits inside their handlers.
+	r.Use(middleware.BodyLimit(32 << 20))
 
 	// ── Health check (no auth) ──────────────────────────────────────────
 	healthHandler := &handlers.HealthHandler{}
 	r.Get("/health", healthHandler.Health)
+
+	// ── Prometheus metrics (no auth; scrape on a trusted network) ───────
+	r.Get("/metrics", middleware.MetricsHandler())
 
 	// ── WebSocket tunnel endpoint (agent authenticates via token) ────────
 	r.HandleFunc("/connect", gw.HandleWebSocket)
@@ -126,6 +176,7 @@ func (s *Server) setupRoutes() {
 			Gateway:     gw,
 			RateLimiter: rateLimiter,
 			Config:      cfg,
+			OIDC:        s.oidcProvider,
 		}
 		api.Route("/auth", authHandler.Routes)
 
@@ -133,9 +184,10 @@ func (s *Server) setupRoutes() {
 		licenseHandler := &handlers.LicenseHandler{DB: db, Config: cfg}
 		api.Get("/license", licenseHandler.GetLicense)
 
-		// Public dashboard endpoints (no session required)
+		// Public dashboard endpoints (no session required) — rate-limited per IP
+		// since they are unauthenticated and execute panel SQL.
 		publicDashboards := &handlers.DashboardsHandler{DB: db, Gateway: gw, Config: cfg}
-		api.Mount("/public/dashboards", publicDashboards.PublicRoutes())
+		api.With(middleware.IPRateLimit(120, time.Minute)).Mount("/public/dashboards", publicDashboards.PublicRoutes())
 
 		// All routes below require a valid session
 		api.Group(func(protected chi.Router) {
@@ -149,16 +201,24 @@ func (s *Server) setupRoutes() {
 			queryHandler := &handlers.QueryHandler{DB: db, Gateway: gw, Config: cfg, Guardrails: s.guardrails}
 			protected.Route("/query", queryHandler.Routes)
 
-			// Connections management (community)
+			// Connections management. Reads (list/get/test) are available to any
+			// authenticated user, but mutating a connection or revealing/rotating
+			// its tunnel token — the credential an agent uses to bridge into the
+			// customer's ClickHouse network — requires admin.
 			connectionsHandler := &handlers.ConnectionsHandler{DB: db, Gateway: gw, Config: cfg}
 			protected.Route("/connections", func(cr chi.Router) {
 				cr.Get("/", connectionsHandler.List)
-				cr.Post("/", connectionsHandler.Create)
 				cr.Get("/{id}", connectionsHandler.Get)
-				cr.Delete("/{id}", connectionsHandler.Delete)
 				cr.Post("/{id}/test", connectionsHandler.TestConnection)
-				cr.Get("/{id}/token", connectionsHandler.GetToken)
-				cr.Post("/{id}/regenerate-token", connectionsHandler.RegenerateToken)
+
+				cr.Group(func(ar chi.Router) {
+					ar.Use(middleware.RequireAdmin(db))
+					ar.Post("/", connectionsHandler.Create)
+					ar.Delete("/{id}", connectionsHandler.Delete)
+					ar.Get("/{id}/token", connectionsHandler.GetToken)
+					ar.Post("/{id}/regenerate-token", connectionsHandler.RegenerateToken)
+					ar.Put("/{id}/sso-account", connectionsHandler.SetSSOAccount)
+				})
 			})
 
 			// Saved queries (community; parameterized run is Pro-gated inside Routes)
@@ -224,6 +284,10 @@ func (s *Server) setupRoutes() {
 					Store: s.chHarvester.GetStore(),
 				}
 				pro.Mount("/cluster-health", clusterHealthHandler.Routes())
+
+				// Query Insights (system.query_log analytics)
+				queryInsightsHandler := &handlers.QueryInsightsHandler{DB: db, Gateway: gw, Config: cfg}
+				pro.Mount("/query-insights", queryInsightsHandler.Routes())
 			})
 		})
 	})
@@ -290,8 +354,54 @@ func (s *Server) Start() error {
 		}
 	}
 
+	if s.cfg.TLSEnabled() {
+		slog.Info("Server listening with native TLS", "addr", s.http.Addr)
+		return s.http.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+	}
+
+	s.warnIfInsecure()
 	slog.Info("Server listening", "addr", s.http.Addr)
 	return s.http.ListenAndServe()
+}
+
+// warnIfInsecure logs a prominent warning when the server is about to serve
+// plaintext HTTP without an obvious TLS terminator in front of it. Session
+// cookies and ClickHouse credentials must not cross a network in cleartext.
+func (s *Server) warnIfInsecure() {
+	appURL := strings.ToLower(strings.TrimSpace(s.cfg.AppURL))
+	// Behind an HTTPS reverse proxy or a loopback-only deployment is fine.
+	if strings.HasPrefix(appURL, "https://") {
+		return
+	}
+	if strings.Contains(appURL, "localhost") || strings.Contains(appURL, "127.0.0.1") {
+		return
+	}
+	slog.Warn("Serving plaintext HTTP — session cookies and ClickHouse credentials are NOT encrypted in transit. " +
+		"Terminate TLS at a reverse proxy, or set tls_cert_file/tls_key_file (TLS_CERT_FILE/TLS_KEY_FILE) to enable native TLS. " +
+		"Do not expose CH-UI directly on an untrusted network without TLS.")
+}
+
+// buildAuditForwarder constructs the SIEM audit forwarder from config, or
+// returns nil when no sink is configured.
+func buildAuditForwarder(cfg *config.Config) *audit.Forwarder {
+	var sinks []audit.Sink
+	if cfg.AuditForwardStdout {
+		sinks = append(sinks, audit.StdoutSink{})
+	}
+	if strings.TrimSpace(cfg.AuditLogFile) != "" {
+		sinks = append(sinks, audit.NewFileSink(strings.TrimSpace(cfg.AuditLogFile)))
+	}
+	if strings.TrimSpace(cfg.AuditWebhookURL) != "" {
+		sinks = append(sinks, audit.NewWebhookSink(strings.TrimSpace(cfg.AuditWebhookURL)))
+	}
+	return audit.NewForwarder(sinks...)
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // Shutdown gracefully stops the server.
@@ -304,5 +414,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.chHarvester.Stop()
 	s.alerts.Stop()
 	s.gateway.Stop()
+	s.auditFwd.Close()
 	return s.http.Shutdown(ctx)
 }

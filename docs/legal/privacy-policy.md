@@ -46,10 +46,14 @@ If you use a managed CH-UI hosting offering:
 
 ## Third-party services
 
-The self-hosted CH-UI binary does not communicate with any third-party services except:
+The self-hosted CH-UI binary does not communicate with any third-party services except the ones you explicitly configure or invoke:
 
-- **Your ClickHouse server** — as configured by you
-- **OpenAI API** — only if you configure the Brain AI feature (Pro) with your own API key
+- **Your ClickHouse server(s)** — as configured by you
+- **Your chosen LLM provider** — only if you enable the Brain AI feature (Pro) with your own API key. This may be OpenAI, any OpenAI-compatible API (e.g. Groq, Together), or a self-hosted/local model via Ollama. Brain sends schema metadata and, when you run a generated query, query context to that provider. No LLM provider is contacted unless Brain is configured.
+- **GitHub** — only when you run `ch-ui update` (checks for and downloads new releases) or enable the optional GitHub model-sync integration.
+- **Your chosen email/alert provider** — only if you configure alert channels (SMTP, Resend, or Brevo) to deliver governance and monitoring notifications.
+
+CH-UI sends **no telemetry, analytics, or usage data** to us or any third party. Every outbound connection above is to a destination you configure, and can be avoided by not enabling the corresponding feature.
 
 ## Data deletion
 
@@ -60,7 +64,7 @@ Since all data is stored locally:
 
 ## Contact
 
-For privacy questions: **c.ricciuti@ch-ui.com**
+For privacy questions: **me@caioricciuti.com**
 
 ## Changes
 

@@ -119,13 +119,18 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no release asset found for %s/%s (expected %s)", runtime.GOOS, runtime.GOARCH, assetName)
 	}
 
-	// Download checksums
-	var expectedHash string
-	if checksumsURL != "" {
-		expectedHash, err = fetchExpectedChecksum(checksumsURL, assetName)
-		if err != nil {
-			fmt.Printf("Warning: could not verify checksum: %v\n", err)
-		}
+	// Fetch and require a published checksum BEFORE downloading. An unverified
+	// self-update is a supply-chain risk, so we fail closed: if we cannot obtain
+	// a checksum for this asset, we refuse to install rather than warn-and-continue.
+	if checksumsURL == "" {
+		return fmt.Errorf("refusing to update: release %s publishes no checksums.txt to verify the download. Download and verify manually if needed", latestTag)
+	}
+	expectedHash, err := fetchExpectedChecksum(checksumsURL, assetName)
+	if err != nil {
+		return fmt.Errorf("refusing to update: could not fetch checksum for %s: %w", assetName, err)
+	}
+	if expectedHash == "" {
+		return fmt.Errorf("refusing to update: no checksum listed for %s in checksums.txt", assetName)
 	}
 
 	// Download binary to temp file in the same directory (for atomic rename)
@@ -136,19 +141,17 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to download update: %w", err)
 	}
 
-	// Verify checksum
-	if expectedHash != "" {
-		actualHash, err := fileSHA256(tmpPath)
-		if err != nil {
-			os.Remove(tmpPath)
-			return fmt.Errorf("failed to compute checksum: %w", err)
-		}
-		if actualHash != expectedHash {
-			os.Remove(tmpPath)
-			return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedHash, actualHash)
-		}
-		fmt.Println("Checksum verified ✓")
+	// Verify checksum (mandatory).
+	actualHash, err := fileSHA256(tmpPath)
+	if err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to compute checksum: %w", err)
 	}
+	if actualHash != expectedHash {
+		os.Remove(tmpPath)
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedHash, actualHash)
+	}
+	fmt.Println("Checksum verified ✓")
 
 	// Make executable
 	if err := os.Chmod(tmpPath, 0755); err != nil {

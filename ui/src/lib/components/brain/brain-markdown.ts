@@ -1,4 +1,5 @@
 import { Marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 export interface MessageSegment {
   type: 'markdown' | 'sql'
@@ -13,9 +14,27 @@ const marked = new Marked({
   gfm: true,
 })
 
-/** Render a markdown string to HTML using marked. */
+// Force external links to open safely and never leak the opener window.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node instanceof HTMLElement && node.tagName === 'A' && node.hasAttribute('href')) {
+    node.setAttribute('target', '_blank')
+    node.setAttribute('rel', 'noopener noreferrer nofollow')
+  }
+})
+
+/**
+ * Render a markdown string to sanitized HTML.
+ *
+ * Output is fed to `{@html}` in BrainMessage and MarkdownPanel (the latter is
+ * reachable on unauthenticated public dashboard share links), so the markdown
+ * may originate from untrusted sources — AI output influenced by table/column
+ * names and query data, or dashboard text authored by another user. We must
+ * never emit raw HTML; DOMPurify strips scripts, event handlers, and
+ * javascript:/data: URLs while leaving normal formatting intact.
+ */
 export function renderMarkdown(content: string): string {
-  return marked.parse(content) as string
+  const dirty = marked.parse(content) as string
+  return DOMPurify.sanitize(dirty, { USE_PROFILES: { html: true } })
 }
 
 /**

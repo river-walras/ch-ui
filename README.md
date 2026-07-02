@@ -99,7 +99,6 @@ Everything below is included in the free Community edition under Apache 2.0.
 - SQL artifact generation — run generated queries directly from chat
 - Brain skills (configurable system prompts/instructions)
 - Token usage tracking
-- Langfuse integration for LLM observability
 
 ### Data Pipelines
 
@@ -133,7 +132,6 @@ Everything below is included in the free Community edition under Apache 2.0.
 - Connection management with multi-connection support
 - Brain provider and model configuration
 - Brain skill management
-- Langfuse integration settings
 - System statistics dashboard
 
 ### Connections & Tunnel
@@ -434,6 +432,11 @@ ch-ui server --clickhouse-url http://127.0.0.1:8123 --connection-name "My ClickH
 
 The login page also has a **Can't login?** button that shows setup guidance.
 
+CH-UI can connect to ClickHouse either directly (point `CLICKHOUSE_URL` at the
+endpoint, including a reverse-proxied `https://` one) or via an outbound tunnel
+that keeps ClickHouse fully private. See
+[`docs/connecting-to-clickhouse.md`](docs/connecting-to-clickhouse.md).
+
 ---
 
 ## Production Checklist
@@ -533,7 +536,10 @@ Downloads the latest release for your OS/arch, verifies checksum, and replaces t
 
 ## Legal
 
-- Core license: [`LICENSE`](LICENSE) (Apache 2.0)
+CH-UI is dual-licensed:
+
+- **Community core** — [Apache 2.0](LICENSE) (`LICENSE.md`). Free to use, modify, and distribute.
+- **Pro features** — [Business Source License 1.1](LICENSE.BSL) (`LICENSE.BSL`). Source-available; production use requires a valid CH-UI Pro license; converts to Apache 2.0 on the Change Date. Every Pro source file carries an `SPDX-License-Identifier: BUSL-1.1` header; see [`LICENSING.md`](LICENSING.md) for the authoritative scope.
 - Licensing details: [`docs/license.md`](docs/license.md)
 - Terms: [`docs/legal/terms-of-service.md`](docs/legal/terms-of-service.md)
 - Privacy: [`docs/legal/privacy-policy.md`](docs/legal/privacy-policy.md)

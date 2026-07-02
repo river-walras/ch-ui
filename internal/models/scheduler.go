@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/caioricciuti/ch-ui/internal/database"
+	"github.com/caioricciuti/ch-ui/internal/safe"
 	"github.com/caioricciuti/ch-ui/internal/scheduler"
 )
 
@@ -29,6 +30,7 @@ func NewScheduler(db *database.DB, runner *Runner) *Scheduler {
 // Start begins the scheduler goroutine.
 func (s *Scheduler) Start() {
 	go func() {
+		defer safe.Recover("model-scheduler")
 		slog.Info("Model scheduler started", "interval", modelTickInterval)
 		ticker := time.NewTicker(modelTickInterval)
 		defer ticker.Stop()

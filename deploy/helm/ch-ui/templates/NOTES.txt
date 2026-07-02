@@ -1,0 +1,20 @@
+CH-UI has been deployed.
+
+{{- if .Values.ingress.enabled }}
+
+Reach it at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+
+Port-forward to reach the UI locally:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "ch-ui.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+
+Then open http://localhost:{{ .Values.service.port }}
+{{- end }}
+
+NOTE: CH-UI is a single-instance application (SQLite + in-memory tunnel state).
+Do not raise replicaCount above 1. Persisted state lives on the
+{{ include "ch-ui.fullname" . }}-data PVC{{ if not .Values.persistence.enabled }} (currently DISABLED — set persistence.enabled=true for durability){{ end }}.

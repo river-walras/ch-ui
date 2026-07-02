@@ -15,6 +15,7 @@ import (
 	"github.com/caioricciuti/ch-ui/internal/config"
 	"github.com/caioricciuti/ch-ui/internal/crypto"
 	"github.com/caioricciuti/ch-ui/internal/database"
+	"github.com/caioricciuti/ch-ui/internal/oidc"
 	"github.com/caioricciuti/ch-ui/internal/server/middleware"
 	"github.com/caioricciuti/ch-ui/internal/tunnel"
 	"github.com/caioricciuti/ch-ui/internal/version"
@@ -35,15 +36,42 @@ type AuthHandler struct {
 	Gateway     *tunnel.Gateway
 	RateLimiter *middleware.RateLimiter
 	Config      *config.Config
+	OIDC        *oidc.Provider // nil unless OIDC SSO is configured
 }
 
 // Routes returns a chi.Router with all auth routes mounted.
 func (h *AuthHandler) Routes(r chi.Router) {
+	r.Get("/config", h.AuthConfig)
 	r.Post("/login", h.Login)
 	r.Post("/logout", h.Logout)
 	r.Get("/session", h.Session)
 	r.Get("/connections", h.Connections)
 	r.Post("/switch-connection", h.SwitchConnection)
+
+	if h.OIDC != nil {
+		// SSO is a Pro feature: RequirePro returns 402 without an active license
+		// (GET is still allowed during the read-only grace window, so SSO login
+		// keeps working for the grace period rather than locking users out).
+		r.With(middleware.RequirePro(h.Config)).Get("/oidc/login", h.OIDCLogin)
+		r.With(middleware.RequirePro(h.Config)).Get("/oidc/callback", h.OIDCCallback)
+	}
+}
+
+// AuthConfig reports which authentication methods are available, so the
+// (unauthenticated) login page can render the right options. SSO is only
+// advertised when configured AND licensed (Pro, including the grace window).
+//
+// GET /api/auth/config
+func (h *AuthHandler) AuthConfig(w http.ResponseWriter, r *http.Request) {
+	oidcEnabled := h.OIDC != nil && h.Config != nil && h.Config.ProAccess() != config.ProNone
+	resp := map[string]interface{}{
+		"password_login": true,
+		"oidc_enabled":   oidcEnabled,
+	}
+	if oidcEnabled {
+		resp["oidc_login_url"] = "/api/auth/oidc/login"
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // ---------- request / response types ----------
@@ -133,6 +161,26 @@ func shouldUseSecureCookie(r *http.Request, cfg *config.Config) bool {
 		}
 	}
 	return false
+}
+
+// auditLoginFailure records a failed authentication attempt in the immutable
+// audit trail. Security reviews and SIEM ingestion require failed logins (not
+// just successes) to detect brute-force and credential-stuffing activity. The
+// password is never logged — only the attempted username, connection, source
+// IP, and a coarse reason.
+func (h *AuthHandler) auditLoginFailure(username string, conn *database.Connection, clientIP, reason string) {
+	connID, connName := "", "unknown"
+	if conn != nil {
+		connID = conn.ID
+		connName = conn.Name
+	}
+	_ = h.DB.CreateAuditLog(database.AuditLogParams{
+		Action:       "user.login_failed",
+		Username:     strPtr(username),
+		ConnectionID: strPtr(connID),
+		Details:      strPtr(fmt.Sprintf("Failed login via connection %s (%s)", connName, reason)),
+		IPAddress:    strPtr(clientIP),
+	})
 }
 
 // ---------- POST /login ----------
@@ -235,6 +283,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		h.RateLimiter.RecordAttempt(ipKey, "ip")
 		h.RateLimiter.RecordAttempt(userKey, "user")
 		slog.Info("Login failed: connection test error", "user", req.Username, "error", err)
+		h.auditLoginFailure(req.Username, conn, clientIP, "connection test error")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "Authentication failed",
 			"message": sanitizeClickHouseAuthMessage(err.Error()),
@@ -249,6 +298,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			errMsg = "Invalid credentials"
 		}
 		slog.Info("Login failed: bad credentials", "user", req.Username)
+		h.auditLoginFailure(req.Username, conn, clientIP, "invalid credentials")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error":   "Authentication failed",
 			"message": sanitizeClickHouseAuthMessage(errMsg),
@@ -422,19 +472,30 @@ func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 		role = *session.UserRole
 	}
 
+	// For SSO sessions, show the person's identity (email) rather than the
+	// shared ClickHouse service account they query through.
+	displayUser := session.ClickhouseUser
+	viaSSO := false
+	if session.AuthSubject != nil && *session.AuthSubject != "" {
+		displayUser = *session.AuthSubject
+		viaSSO = true
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"authenticated": true,
-		"user":          session.ClickhouseUser,
+		"user":          displayUser,
 		"user_role":     role,
 		"expires_at":    session.ExpiresAt,
+		"via_sso":       viaSSO,
 		"connection": map[string]interface{}{
 			"id":     session.ConnectionID,
 			"name":   connName,
 			"online": connOnline,
 		},
 		"session": map[string]interface{}{
-			"user":             session.ClickhouseUser,
+			"user":             displayUser,
 			"role":             role,
+			"viaSSO":           viaSSO,
 			"connectionId":     session.ConnectionID,
 			"connectionName":   connName,
 			"connectionOnline": connOnline,

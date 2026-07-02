@@ -1,0 +1,79 @@
+# Default values for ch-ui.
+
+image:
+  repository: ghcr.io/caioricciuti/ch-ui
+  tag: ""            # defaults to .Chart.appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# IMPORTANT: CH-UI stores state in a local SQLite database and keeps tunnel
+# state in memory. It is a SINGLE-INSTANCE application — do not scale beyond one
+# replica. The Deployment uses the Recreate strategy for this reason.
+replicaCount: 1
+
+# APP_SECRET_KEY encrypts stored credentials. Provide a strong random value.
+# If existingSecret is set, the key is read from there instead.
+appSecretKey: ""
+existingSecret: ""
+existingSecretKey: app-secret-key
+
+# Extra environment variables (e.g. CLICKHOUSE_URL, AUDIT_WEBHOOK_URL, TLS_*).
+env: {}
+  # CLICKHOUSE_URL: http://clickhouse:8123
+  # AUDIT_FORWARD_STDOUT: "true"
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+
+service:
+  type: ClusterIP
+  port: 3488
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ch-ui.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: ch-ui-tls
+  #    hosts:
+  #      - ch-ui.example.com
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations: {}
+
+# Pod hardening — CH-UI runs as a non-root user in the image.
+podSecurityContext:
+  fsGroup: 1000
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

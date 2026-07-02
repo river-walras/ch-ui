@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 
 FROM alpine:3.20 AS runtime
 RUN addgroup -S chui && adduser -S -G chui chui \
-    && apk add --no-cache ca-certificates tzdata \
+    && apk add --no-cache ca-certificates tzdata wget \
     && mkdir -p /app/data \
     && chown -R chui:chui /app
 
@@ -42,6 +42,9 @@ ENV DATABASE_PATH=/app/data/ch-ui.db
 
 EXPOSE 3488
 VOLUME ["/app/data"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:3488/health || exit 1
 
 USER chui
 ENTRYPOINT ["ch-ui", "server"]

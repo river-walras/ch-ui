@@ -29,25 +29,29 @@ type ModelsHandler struct {
 func (h *ModelsHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 
+	// Writes and runs (which materialize tables) require admin/analyst; viewers
+	// are read-only.
+	writer := middleware.RequireWriter()
+
 	r.Get("/", h.ListModels)
-	r.Post("/", h.CreateModel)
+	r.With(writer).Post("/", h.CreateModel)
 	r.Get("/dag", h.GetDAG)
 	r.Get("/validate", h.ValidateAll)
-	r.Post("/run", h.RunAll)
+	r.With(writer).Post("/run", h.RunAll)
 	r.Get("/runs", h.ListRuns)
 	r.Get("/runs/{runId}", h.GetRun)
 	r.Get("/pipelines", h.ListPipelines)
-	r.Post("/pipelines/{anchorId}/run", h.RunPipeline)
+	r.With(writer).Post("/pipelines/{anchorId}/run", h.RunPipeline)
 	r.Get("/schedules", h.ListSchedules)
 	r.Get("/schedule/{anchorId}", h.GetSchedule)
-	r.Put("/schedule/{anchorId}", h.UpsertSchedule)
-	r.Delete("/schedule/{anchorId}", h.DeleteSchedule)
+	r.With(writer).Put("/schedule/{anchorId}", h.UpsertSchedule)
+	r.With(writer).Delete("/schedule/{anchorId}", h.DeleteSchedule)
 
 	r.Route("/{id}", func(r chi.Router) {
 		r.Get("/", h.GetModel)
-		r.Put("/", h.UpdateModel)
-		r.Delete("/", h.DeleteModel)
-		r.Post("/run", h.RunSingle)
+		r.With(writer).Put("/", h.UpdateModel)
+		r.With(writer).Delete("/", h.DeleteModel)
+		r.With(writer).Post("/run", h.RunSingle)
 	})
 
 	return r

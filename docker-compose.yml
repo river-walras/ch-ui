@@ -1,0 +1,49 @@
+# CH-UI quick-start with a local ClickHouse.
+#
+#   docker compose up -d
+#   open http://localhost:3488
+#
+# In production, set APP_SECRET_KEY to a strong random value (it encrypts stored
+# credentials) and terminate TLS at a proxy or via tls_cert_file/tls_key_file.
+services:
+  ch-ui:
+    image: ghcr.io/caioricciuti/ch-ui:latest
+    # Or build locally: build: .
+    restart: unless-stopped
+    ports:
+      - "3488:3488"
+    environment:
+      # CHANGE THIS in production — encrypts API keys and session credentials.
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-please-change-me-to-a-random-secret}
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CONNECTION_NAME: Local ClickHouse
+      # Forward audit events to your SIEM (optional):
+      # AUDIT_FORWARD_STDOUT: "true"
+      # AUDIT_WEBHOOK_URL: https://siem.example.com/hook
+    volumes:
+      - ch_ui_data:/app/data
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ch_ui_data:
+  clickhouse_data:
